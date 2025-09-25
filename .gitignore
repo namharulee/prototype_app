@@ -1,0 +1,15 @@
+# Ignore Python venvs
+.venv/
+venv/
+
+# Ignore Python caches
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore training outputs
+runs/
+*.pt
+
+# Ignore datasets (if very large)
+dataset/
