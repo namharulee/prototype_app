@@ -10,7 +10,8 @@ opencv-python-headless==4.9.0.80
 
 # ML core
 torch==2.5.1
-torchvision==0.20.1
+torchvision==0.21.0
+
 numpy==1.26.4
 
 # Helpers
