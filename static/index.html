@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="manifest" href="/manifest.webmanifest">
+  <title>Delivery Scanner — Phase 1</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="theme">
+
+<header>
+  <h1>Delivery Scanner — Phase 1</h1>
+  <div class="controls">
+    <button id="darkToggle" title="Toggle dark mode">🌙</button>
+    <span id="classCounts"></span>
+  </div>
+</header>
+
+<nav class="steps">
+  <button class="step-btn active" data-step="1">1) Upload Invoice</button>
+  <button class="step-btn" data-step="2">2) Scan Items</button>
+  <button class="step-btn" data-step="3">3) Review & Finish</button>
+</nav>
+
+<main>
+  <!-- Step 1 -->
+  <section id="step1" class="panel show">
+    <h2>Upload Invoice</h2>
+    <p>Select an invoice image (JPG/PNG). OCR will extract item names for quick corrections later.</p>
+    <input type="file" id="invoiceFile" accept="image/*" />
+    <button id="uploadInvoice">Process Invoice</button>
+    <div id="invoiceResult" class="card"></div>
+    <div class="actions">
+      <button class="secondary" data-goto="2">Next → Scan Items</button>
+    </div>
+  </section>
+
+  <!-- Step 2 -->
+  <section id="step2" class="panel">
+    <h2>Scan Items</h2>
+    <p>Use your camera or upload a photo of the package/label.</p>
+
+    <div class="camera">
+      <input type="file" id="scanFile" accept="image/*" capture="environment" />
+      <button id="scanBtn">Scan Photo</button>
+    </div>
+
+    <div class="suggestion card">
+      <h3>OCR Suggestion</h3>
+      <div>Auto label: <code id="autoLabel">—</code></div>
+      <label>
+        Correct to:
+        <input type="text" id="searchItem" placeholder="Search item…" />
+        <select id="correctDropdown"></select>
+      </label>
+      <div class="row">
+        <button id="confirmBtn">Confirm</button>
+        <button id="correctBtn" class="secondary">Apply Correction</button>
+        <button class="ghost" data-goto="1">← Go Back</button>
+      </div>
+    </div>
+
+    <h3>Progress</h3>
+    <div id="progressText">0 items scanned</div>
+  </section>
+
+  <!-- Step 3 -->
+  <section id="step3" class="panel">
+    <h2>Review & Finish</h2>
+    <div id="gallery" class="grid"></div>
+    <div class="summary">
+      <div id="stats"></div>
+      <div class="row">
+        <button id="exportCSV" class="secondary">Export CSV</button>
+        <button id="exportJSON" class="secondary">Export JSON</button>
+        <button id="finishBtn">Finish Session</button>
+        <button class="ghost" data-goto="2">← Go Back</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <small>Tip: C = Confirm, E = Correct, B = Go Back</small>
+</footer>
+
+<script src="/app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js');
+  }
+</script>
+</body>
+</html>

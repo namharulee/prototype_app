@@ -1,0 +1,9 @@
+{
+  "name": "Delivery Scanner — Phase 1",
+  "short_name": "Scanner",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0c10",
+  "theme_color": "#0b0c10",
+  "icons": []
+}
