@@ -76,7 +76,7 @@ el('scanBtn').onclick = async () => {
   // Track the scan
   const relpath = data.saved_relpath; // e.g., "pork_loin_130g/2025...jpg"
   const [label, filename] = relpath.split('/');
-  lastScan = { relpath, label, filename, status:"pending" };
+  lastScan = { relpath, label, filename, cloudKey: data.cloud_key || null, status:"pending" };
   scans.push(lastScan);
   refreshProgress();
   refreshGallery();
@@ -129,17 +129,32 @@ function refreshGallery() {
   scans.forEach(s => {
     const tile = document.createElement('div');
     tile.className = 'tile';
-    // no direct file serving; show a placeholder + label/status
-    tile.innerHTML = `
-      <div style="width:100%;height:160px;background:#0c0f16;display:flex;align-items:center;justify-content:center;color:#555;">(image saved)</div>
-      <div class="meta">
-        <span>${s.label}</span>
-        <span>${s.status}</span>
-      </div>
-    `;
+    const body = document.createElement('div');
+    body.style = "width:100%;height:160px;background:#0c0f16;display:flex;align-items:center;justify-content:center;color:#555;";
+
+    if (s.cloudKey) {
+      const img = document.createElement('img');
+      img.style = "width:100%;height:160px;object-fit:cover;display:block;";
+      body.innerHTML = '';
+      body.appendChild(img);
+      fetch(`/preview_url?key=${encodeURIComponent(s.cloudKey)}`)
+        .then(r => r.json())
+        .then(d => { if (d.url) img.src = d.url; })
+        .catch(()=>{ body.textContent="(image saved)"; });
+    } else {
+      body.textContent = "(image saved)";
+    }
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.innerHTML = `<span>${s.label}</span><span>${s.status}</span>`;
+
+    tile.appendChild(body);
+    tile.appendChild(meta);
     g.appendChild(tile);
   });
 }
+
 
 // Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
@@ -192,8 +207,8 @@ el('finishBtn').onclick = async () => {
 // Class counts (dataset growth)
 async function refreshCounts() {
   try {
-    const r = await fetch('/class_counts');
-    if (!r.ok) return;
+    let r = await fetch('/class_counts_cloud');    
+    if (!r.ok) r = await fetch('/class_counts');     
     const data = await r.json();
     const total = Object.values(data.counts||{}).reduce((a,b)=>a+b,0);
     el('classCounts').textContent = `Dataset images: ${total}`;

@@ -1,6 +1,44 @@
+import boto3, io
+from botocore.config import Config as BotoConfig
+
+B2_BUCKET   = os.getenv("B2_BUCKET")
+B2_ENDPOINT = os.getenv("B2_ENDPOINT")
+B2_KEY_ID   = os.getenv("B2_KEY_ID")
+B2_APP_KEY  = os.getenv("B2_APP_KEY")
+
+_S3 = None
+def get_s3():
+    global _S3
+    if _S3 is None and all([B2_BUCKET, B2_ENDPOINT, B2_KEY_ID, B2_APP_KEY]):
+        _S3 = boto3.client(
+            "s3",
+            endpoint_url=B2_ENDPOINT,
+            aws_access_key_id=B2_KEY_ID,
+            aws_secret_access_key=B2_APP_KEY,
+            config=BotoConfig(signature_version="s3v4"),
+        )
+    return _S3
+
+def upload_image_to_b2(image_pil, label: str, filename: str) -> str:
+    """
+    Uploads PIL image to B2 at key: raw/<label>/<filename>
+    Returns the key (path in bucket).
+    """
+    s3 = get_s3()
+    if not s3:
+        return ""  # cloud not configured
+    key = f"raw/{clean_label(label)}/{filename}"
+    buf = io.BytesIO()
+    image_pil.convert("RGB").save(buf, format="JPEG", quality=92)
+    buf.seek(0)
+    s3.upload_fileobj(buf, B2_BUCKET, key, ExtraArgs={"ContentType": "image/jpeg"})
+    return key
+
+
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi import Query
 from pydantic import BaseModel
 from typing import List, Optional
 import pytesseract
@@ -30,6 +68,18 @@ def save_image_to_class(img: Image.Image, label: str) -> str:
     img.convert("RGB").save(path, quality=92)
     return f"{cls}/{fname}"  # relative path for frontend
 
+@app.get("/preview_url")
+def preview_url(key: str = Query(...), expires: int = 3600):
+    s3 = get_s3()
+    if not s3:
+        return JSONResponse({"error": "Cloud not configured"}, status_code=400)
+    url = s3.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": B2_BUCKET, "Key": key},
+        ExpiresIn=int(expires),
+    )
+    return {"url": url}
+
 @app.get("/ping")
 def ping():
     return {"message": "pong"}
@@ -49,6 +99,31 @@ class InvoiceResult(BaseModel):
     lines: List[str]
     items_for_dropdown: List[str]
     sample: List[str]
+
+@app.get("/class_counts_cloud")
+def class_counts_cloud():
+    s3 = get_s3()
+    if not s3:
+        return {"counts": {}}
+    counts = {}
+    prefix = "raw/"
+    token = None
+    while True:
+        kwargs = {"Bucket": B2_BUCKET, "Prefix": prefix, "MaxKeys": 1000}
+        if token:
+            kwargs["ContinuationToken"] = token
+        resp = s3.list_objects_v2(**kwargs)
+        for obj in resp.get("Contents", []):
+            parts = obj["Key"].split("/")
+            if len(parts) >= 3:  # raw/<class>/<file>
+                cls = parts[1]
+                counts[cls] = counts.get(cls, 0) + 1
+        if resp.get("IsTruncated"):
+            token = resp.get("NextContinuationToken")
+        else:
+            break
+    return {"counts": counts}
+
 
 @app.post("/invoice", response_model=InvoiceResult)
 async def invoice(file: UploadFile = File(...)):
@@ -94,6 +169,14 @@ async def scan(file: UploadFile = File(...), fallback_label: Optional[str] = For
         return {"ocr_label": clean_label(guessed), "saved_relpath": relpath, "note": "Saved to dataset/raw/<label>."}
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
+cloud_key = upload_image_to_b2(image, guessed, filename)  # returns key or ""
+return {
+    "ocr_label": clean_label(guessed),
+    "saved_relpath": relpath,         # existing local relative path
+    "cloud_key": cloud_key,           # NEW: path in B2 (e.g., raw/pork_loin_130g/2025...jpg)
+    "note": "Saved locally and to B2 (if configured)."
+}
+
 
 @app.post("/correct")
 async def correct(old_label: str = Form(...), new_label: str = Form(...), filename: str = Form(...)):
