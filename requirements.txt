@@ -1,12 +1,12 @@
 fastapi==0.115.6
-uvicorn[standard]>=0.28.0
+uvicorn[standard]==0.30.0
 pytesseract==0.3.10
 easyocr==1.7.1
 Pillow==10.4.0
 opencv-python-headless==4.9.0.80
 torch==2.7.0
 torchvision==0.22.0
-numpy==2.3.3
+numpy==1.26.4
 pandas==2.2.3
 boto3==1.35.36
-click>=8.1.3,<9.0
+click==8.1.7
