@@ -1,3 +1,5 @@
+const API_BASE = window.location.origin;
+
 const el = (id) => document.getElementById(id);
 const stepBtns = document.querySelectorAll('.step-btn');
 
@@ -25,7 +27,7 @@ el('uploadInvoice').onclick = async () => {
   if (!f) return alert('Choose an invoice image first.');
   const fd = new FormData();
   fd.append('file', f);
-  const r = await fetch('/invoice', { method:'POST', body: fd });
+  const r = await fetch('${API_BASE}/invoice', { method:'POST', body: fd });
   if (!r.ok) { alert('Invoice OCR failed'); return; }
   const data = await r.json();
   invoiceItems = data.items_for_dropdown || [];
@@ -69,7 +71,7 @@ el('scanBtn').onclick = async () => {
   const fallback = ddl.value || '';
   fd.append('file', f);
   fd.append('fallback_label', fallback);
-  const r = await fetch('/scan', { method:'POST', body: fd });
+  const r = await fetch('${API_BASE}/scan', { method:'POST', body: fd });
   if (!r.ok) { alert('Scan failed'); return; }
   const data = await r.json();
   el('autoLabel').textContent = data.ocr_label;
@@ -98,7 +100,7 @@ el('correctBtn').onclick = async () => {
   fd.append('old_label', lastScan.label);
   fd.append('new_label', newLabel);
   fd.append('filename', lastScan.filename);
-  const r = await fetch('/correct', { method:'POST', body: fd });
+  const r = await fetch('${API_BASE}/correct', { method:'POST', body: fd });
   if (!r.ok) { alert('Correction failed'); return; }
   lastScan.label = cleanLabel(newLabel);
   lastScan.relpath = `${lastScan.label}/${lastScan.filename}`;
@@ -137,7 +139,7 @@ function refreshGallery() {
       img.style = "width:100%;height:160px;object-fit:cover;display:block;";
       body.innerHTML = '';
       body.appendChild(img);
-      fetch(`/preview_url?key=${encodeURIComponent(s.cloudKey)}`)
+      fetch(`${API_BASE}/preview_url?key=${encodeURIComponent(s.cloudKey)}`)
         .then(r => r.json())
         .then(d => { if (d.url) img.src = d.url; })
         .catch(()=>{ body.textContent="(image saved)"; });
@@ -194,7 +196,7 @@ el('finishBtn').onclick = async () => {
   const payload = { when: new Date().toISOString(), items: scans };
   const fd = new FormData();
   fd.append('session_json', JSON.stringify(payload));
-  const r = await fetch('/summary', { method:'POST', body: fd });
+  const r = await fetch('${API_BASE}/summary', { method:'POST', body: fd });
   if (r.ok) {
     alert('Session stored. You can start a new one.');
     scans = []; lastScan = null;
@@ -207,8 +209,8 @@ el('finishBtn').onclick = async () => {
 // Class counts (dataset growth)
 async function refreshCounts() {
   try {
-    let r = await fetch('/class_counts_cloud');    
-    if (!r.ok) r = await fetch('/class_counts');     
+    let r = await fetch('${API_BASE}/class_counts_cloud');    
+    if (!r.ok) r = await fetch('${API_BASE}/class_counts');     
     const data = await r.json();
     const total = Object.values(data.counts||{}).reduce((a,b)=>a+b,0);
     el('classCounts').textContent = `Dataset images: ${total}`;
