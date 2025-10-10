@@ -50,7 +50,7 @@ from datetime import datetime
 app = FastAPI()
 
 # Serve the frontend
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+app.mount("/static", StaticFiles(directory="static", html=True), name="static")
 
 DATASET_ROOT = os.path.join("dataset", "raw")
 os.makedirs(DATASET_ROOT, exist_ok=True)
@@ -84,46 +84,6 @@ def preview_url(key: str = Query(...), expires: int = 3600):
 @app.get("/ping")
 def ping():
     return {"message": "pong"}
-
-@app.get("/class_counts")
-def class_counts():
-    counts = {}
-    for root, dirs, files in os.walk(DATASET_ROOT):
-        # only leaf dirs (class dirs)
-        if root == DATASET_ROOT:
-            for d in dirs:
-                count = len([f for f in os.listdir(os.path.join(root, d)) if f.lower().endswith((".jpg",".jpeg",".png"))])
-                counts[d] = count
-    return {"counts": counts}
-
-class InvoiceResult(BaseModel):
-    lines: List[str]
-    items_for_dropdown: List[str]
-    sample: List[str]
-
-@app.get("/class_counts_cloud")
-def class_counts_cloud():
-    s3 = get_s3()
-    if not s3:
-        return {"counts": {}}
-    counts = {}
-    prefix = "raw/"
-    token = None
-    while True:
-        kwargs = {"Bucket": B2_BUCKET, "Prefix": prefix, "MaxKeys": 1000}
-        if token:
-            kwargs["ContinuationToken"] = token
-        resp = s3.list_objects_v2(**kwargs)
-        for obj in resp.get("Contents", []):
-            parts = obj["Key"].split("/")
-            if len(parts) >= 3:  # raw/<class>/<file>
-                cls = parts[1]
-                counts[cls] = counts.get(cls, 0) + 1
-        if resp.get("IsTruncated"):
-            token = resp.get("NextContinuationToken")
-        else:
-            break
-    return {"counts": counts}
 
 
 @app.post("/invoice", response_model=InvoiceResult)
@@ -182,38 +142,3 @@ async def scan(file: UploadFile = File(...), fallback_label: Optional[str] = For
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
-@app.post("/correct")
-async def correct(old_label: str = Form(...), new_label: str = Form(...), filename: str = Form(...)):
-    """
-    Move a previously saved file from old_label/filename -> new_label/filename
-    """
-    try:
-        oldc = clean_label(old_label)
-        newc = clean_label(new_label)
-        old_path = os.path.join(DATASET_ROOT, oldc, filename)
-        new_dir = os.path.join(DATASET_ROOT, newc)
-        os.makedirs(new_dir, exist_ok=True)
-        new_path = os.path.join(new_dir, filename)
-        if not os.path.exists(old_path):
-            return JSONResponse(content={"error": "file not found"}, status_code=404)
-        shutil.move(old_path, new_path)
-        return {"message": f"moved to {newc}/{filename}"}
-    except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
-# Optional: persist session summaries (simple JSON log)
-SESS_LOG = "session_logs.jsonl"
-os.makedirs(os.path.dirname(SESS_LOG) or ".", exist_ok=True)
-
-@app.post("/summary")
-async def summary(session_json: str = Form(...)):
-    """
-    Frontend posts a final session summary (JSON string). We append to a JSONL file.
-    """
-    try:
-        data = json.loads(session_json)
-        with open(SESS_LOG, "a", encoding="utf-8") as f:
-            f.write(json.dumps(data, ensure_ascii=False) + "\n")
-        return {"message": "summary stored"}
-    except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500)
