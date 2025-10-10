@@ -166,16 +166,19 @@ async def scan(file: UploadFile = File(...), fallback_label: Optional[str] = For
         # Heuristic pick: first non-empty line; else fallback from UI; else "unknown"
         guessed = lines[0] if lines else (fallback_label or "unknown")
         relpath = save_image_to_class(image, guessed)
-        return {"ocr_label": clean_label(guessed), "saved_relpath": relpath, "note": "Saved to dataset/raw/<label>."}
+
+        # Upload to B2 (if configured)
+        cloud_key = upload_image_to_b2(image, guessed, os.path.basename(relpath))  # returns key or ""
+
+        return {
+            "ocr_label": clean_label(guessed),
+            "saved_relpath": relpath,         # existing local relative path
+            "cloud_key": cloud_key,           # path in B2 if available
+            "note": "Saved locally and to B2 (if configured)."
+        }
+
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
-cloud_key = upload_image_to_b2(image, guessed, filename)  # returns key or ""
-return {
-    "ocr_label": clean_label(guessed),
-    "saved_relpath": relpath,         # existing local relative path
-    "cloud_key": cloud_key,           # NEW: path in B2 (e.g., raw/pork_loin_130g/2025...jpg)
-    "note": "Saved locally and to B2 (if configured)."
-}
 
 
 @app.post("/correct")
