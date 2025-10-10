@@ -1,3 +1,4 @@
+import os
 import boto3, io
 from botocore.config import Config as BotoConfig
 
