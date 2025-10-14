@@ -1,3 +1,8 @@
+"""FastAPI application entrypoint."""
+
+# Reminder: create a backup before modifying this file:
+# cp main.py main_backup_stage1_$(date +%Y%m%d_%H%M).py
+
 import os
 import boto3, io
 from botocore.config import Config as BotoConfig
@@ -47,6 +52,8 @@ from PIL import Image
 import io, os, re, shutil, uuid, json
 from datetime import datetime
 
+from ocr_utils import run_paddle_ocr
+
 app = FastAPI()
 
 # Serve the frontend
@@ -85,19 +92,37 @@ def preview_url(key: str = Query(...), expires: int = 3600):
 def ping():
     return {"message": "pong"}
 
+class OCRLine(BaseModel):
+    """A single OCR text line with associated confidence."""
+
+    text: str
+    confidence: float
+
+
+class InvoiceResult(BaseModel):
+    """Response payload for the invoice OCR endpoint."""
+
+    ocr_lines: List[OCRLine]
+
+
 @app.post("/invoice", response_model=InvoiceResult)
 async def invoice(file: UploadFile = File(...)):
-    contents = await file.read()
-    image = Image.open(io.BytesIO(contents))
-    raw_text = pytesseract.image_to_string(image)
-    lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
-    items = [l for l in lines if 3 <= len(l.split()) <= 12]
-    seen, uniq = set(), []
-    for it in items:
-        if it not in seen:
-            uniq.append(it)
-            seen.add(it)
-    return {"lines": lines, "items_for_dropdown": uniq[:200], "sample": lines[:5]}
+    """Run PaddleOCR on the provided invoice image."""
+
+    try:
+        contents = await file.read()
+        ocr_pairs = run_paddle_ocr(contents)
+        return {
+            "ocr_lines": [
+                {"text": text, "confidence": confidence}
+                for text, confidence in ocr_pairs
+            ]
+        }
+    except Exception as exc:  # pragma: no cover - defensive logging for runtime issues
+        return JSONResponse(
+            content={"error": f"OCR processing failed: {exc}"},
+            status_code=500,
+        )
 
 class ScanResponse(BaseModel):
     ocr_label: str
