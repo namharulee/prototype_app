@@ -34,7 +34,7 @@ el('uploadInvoice').onclick = async () => {
   // fill dropdown for the scan step
   fillDropdown(invoiceItems);
   el('invoiceResult').innerHTML = `
-    <b>Extracted ${data.lines.length} lines.</b><br>
+    <b>Extracted ${data.ocr_lines.length} lines.</b><br>
     Sample:<pre>${(data.sample||[]).join('\n')}</pre>
   `;
 };
