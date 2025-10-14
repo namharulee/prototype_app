@@ -13,3 +13,4 @@ runs/
 
 # Ignore datasets (if very large)
 dataset/
+*.log

@@ -85,28 +85,19 @@ def preview_url(key: str = Query(...), expires: int = 3600):
 def ping():
     return {"message": "pong"}
 
-
 @app.post("/invoice", response_model=InvoiceResult)
 async def invoice(file: UploadFile = File(...)):
-    """
-    Upload an invoice (JPG/PNG). Returns OCR lines + a cleaned list for dropdowns.
-    """
-    try:
-        contents = await file.read()
-        image = Image.open(io.BytesIO(contents))
-        # Basic OCR (Tesseract). EasyOCR can be added as fallback later.
-        raw_text = pytesseract.image_to_string(image)
-        lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
-        # Build dropdown items: heuristic—prefer mid-length lines
-        items = [l for l in lines if 3 <= len(l.split()) <= 12]
-        # Deduplicate preserving order
-        seen, uniq = set(), []
-        for it in items:
-            if it not in seen:
-                uniq.append(it); seen.add(it)
-        return {"lines": lines, "items_for_dropdown": uniq[:200], "sample": lines[:5]}
-    except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+    contents = await file.read()
+    image = Image.open(io.BytesIO(contents))
+    raw_text = pytesseract.image_to_string(image)
+    lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
+    items = [l for l in lines if 3 <= len(l.split()) <= 12]
+    seen, uniq = set(), []
+    for it in items:
+        if it not in seen:
+            uniq.append(it)
+            seen.add(it)
+    return {"lines": lines, "items_for_dropdown": uniq[:200], "sample": lines[:5]}
 
 class ScanResponse(BaseModel):
     ocr_label: str
