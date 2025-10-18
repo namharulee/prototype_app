@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Invoice OCR Test</title>
+  <style>
+    body { font-family: sans-serif; margin: 30px; background: #f6f6f6; }
+    .container { background: #fff; padding: 20px; border-radius: 12px; width: 400px; }
+    input[type=file] { margin-bottom: 10px; }
+    pre { background: #222; color: #0f0; padding: 10px; border-radius: 6px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Invoice OCR Tester</h2>
+    <input type="file" id="fileInput" accept="image/*" />
+    <button id="uploadBtn">Upload & Read</button>
+    <p id="status"></p>
+    <pre id="output"></pre>
+  </div>
+
+  <script>
+    document.getElementById('uploadBtn').addEventListener('click', async () => {
+      const file = document.getElementById('fileInput').files[0];
+      if (!file) {
+        alert("Please select an image first");
+        return;
+      }
+      const fd = new FormData();
+      fd.append('file', file);
+      document.getElementById('status').textContent = "Reading...";
+      document.getElementById('output').textContent = "";
+      try {
+        const r = await fetch('/invoice', { method: 'POST', body: fd });
+        const data = await r.json();
+        document.getElementById('status').textContent = "Done ✅";
+        document.getElementById('output').textContent = JSON.stringify(data, null, 2);
+      } catch (err) {
+        document.getElementById('status').textContent = "Error ❌";
+        document.getElementById('output').textContent = err.toString();
+      }
+    });
+  </script>
+</body>
+</html>
