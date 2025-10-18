@@ -107,18 +107,29 @@ class InvoiceResult(BaseModel):
 
 @app.post("/invoice", response_model=InvoiceResult)
 async def invoice(file: UploadFile = File(...)):
-    """Run PaddleOCR on the provided invoice image."""
+    """Run PaddleOCR on the provided invoice image and return text + confidence."""
 
     try:
         contents = await file.read()
+        print("[DEBUG] Received file:", file.filename, "size:", len(contents))
         ocr_pairs = run_paddle_ocr(contents)
-        return {
-            "ocr_lines": [
-                {"text": text, "confidence": confidence}
-                for text, confidence in ocr_pairs
-            ]
-        }
-    except Exception as exc:  # pragma: no cover - defensive logging for runtime issues
+
+        # Ensure output structure is normalized
+        ocr_lines = []
+        for entry in ocr_pairs:
+            # Accepts either tuple or dict from run_paddle_ocr
+            if isinstance(entry, dict):
+                ocr_lines.append(entry)
+            elif isinstance(entry, (list, tuple)) and len(entry) == 2:
+                text, confidence = entry
+                ocr_lines.append({"text": text, "confidence": float(confidence)})
+
+        print("[DEBUG] OCR complete, returning", len(ocr_lines), "lines")
+
+        return {"ocr_lines": ocr_lines}
+
+    except Exception as exc:
+        print("[ERROR] OCR processing failed:", exc)
         return JSONResponse(
             content={"error": f"OCR processing failed: {exc}"},
             status_code=500,
