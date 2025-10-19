@@ -1,3 +1,4 @@
+
 """Helpers for validating OCR output with GPT-4o-mini."""
 
 from __future__ import annotations

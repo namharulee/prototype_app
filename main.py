@@ -52,7 +52,8 @@ from PIL import Image
 import io, os, re, uuid
 from datetime import datetime
 
-from ocr_utils import run_paddle_ocr
+from ocr_utils import normalize_ocr_text, run_paddle_ocr
+from llm_validator import validate_invoice_text
 
 app = FastAPI()
 
@@ -103,33 +104,29 @@ class InvoiceResult(BaseModel):
     """Response payload for the invoice OCR endpoint."""
 
     ocr_lines: List[OCRLine]
+    normalized: str
+    structured: Dict[str, Any]
 
 
 @app.post("/invoice", response_model=InvoiceResult)
 async def invoice(file: UploadFile = File(...)):
-    """Run PaddleOCR on the provided invoice image and return text + confidence."""
+    """Run PaddleOCR on the provided invoice image."""
 
     try:
         contents = await file.read()
-        print("[DEBUG] Received file:", file.filename, "size:", len(contents))
         ocr_pairs = run_paddle_ocr(contents)
-
-        # Ensure output structure is normalized
-        ocr_lines = []
-        for entry in ocr_pairs:
-            # Accepts either tuple or dict from run_paddle_ocr
-            if isinstance(entry, dict):
-                ocr_lines.append(entry)
-            elif isinstance(entry, (list, tuple)) and len(entry) == 2:
-                text, confidence = entry
-                ocr_lines.append({"text": text, "confidence": float(confidence)})
-
-        print("[DEBUG] OCR complete, returning", len(ocr_lines), "lines")
-
-        return {"ocr_lines": ocr_lines}
-
-    except Exception as exc:
-        print("[ERROR] OCR processing failed:", exc)
+        ocr_lines = [
+            {"text": text, "confidence": confidence}
+            for text, confidence in ocr_pairs
+        ]
+        normalized_text = normalize_ocr_text(ocr_lines)
+        structured = validate_invoice_text(normalized_text)
+        return {
+            "ocr_lines": ocr_lines,
+            "normalized": normalized_text,
+            "structured": structured,
+        }
+    except Exception as exc:  # pragma: no cover - defensive logging for runtime issues
         return JSONResponse(
             content={"error": f"OCR processing failed: {exc}"},
             status_code=500,
@@ -159,13 +156,3 @@ async def scan(file: UploadFile = File(...), fallback_label: Optional[str] = For
         cloud_key = upload_image_to_b2(image, guessed, os.path.basename(relpath))  # returns key or ""
 
         return {
-            "ocr_label": clean_label(guessed),
-            "saved_relpath": relpath,         # existing local relative path
-            "cloud_key": cloud_key,           # path in B2 if available
-            "note": "Saved locally and to B2 (if configured)."
-        }
-
-    except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
-
