@@ -156,13 +156,7 @@ async def scan(file: UploadFile = File(...), fallback_label: Optional[str] = For
         cloud_key = upload_image_to_b2(image, guessed, os.path.basename(relpath))  # returns key or ""
 
         return {
-            "ocr_label": clean_label(guessed),
-            "saved_relpath": relpath,         # existing local relative path
-            "cloud_key": cloud_key,           # path in B2 if available
-            "note": "Saved locally and to B2 (if configured)."
+            "ocr_lines": ocr_lines,
+            "normalized": normalized_text,
+            "structured": structured,
         }
-
-    except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500)
-
-
