@@ -46,10 +46,10 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi import Query
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 import pytesseract
 from PIL import Image
-import io, os, re, shutil, uuid, json
+import io, os, re, uuid
 from datetime import datetime
 
 from ocr_utils import run_paddle_ocr
