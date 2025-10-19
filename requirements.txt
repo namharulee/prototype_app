@@ -5,7 +5,7 @@ easyocr==1.7.1
 paddleocr==2.7.3
 paddlepaddle==2.6.1
 pillow==10.4.0
-opencv-python==4.9.0.80
+opencv-python<=4.9.0.80
 torch==2.7.0
 torchvision==0.22.0
 numpy==1.26.4
