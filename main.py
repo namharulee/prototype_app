@@ -156,3 +156,7 @@ async def scan(file: UploadFile = File(...), fallback_label: Optional[str] = For
         cloud_key = upload_image_to_b2(image, guessed, os.path.basename(relpath))  # returns key or ""
 
         return {
+            "ocr_lines": ocr_lines,
+            "normalized": normalized_text,
+            "structured": structured,
+        }
