@@ -161,7 +161,7 @@ async def scan(file: UploadFile = File(...), fallback_label: Optional[str] = For
             "structured": structured,
         }
     except Exception as exc:  # pragma: no cover - defensive logging for runtime issues
-    return JSONResponse(
+      return JSONResponse(
         content={"error": f"OCR or GPT processing failed: {exc}"},
         status_code=500,
-    )
+      )
