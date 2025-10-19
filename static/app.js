@@ -59,15 +59,8 @@ el('uploadInvoice').onclick = async () => {
   const legacySample = data.sample || texts.slice(0, 5);
 
   el('invoiceResult').innerHTML = `
-    <b>Extracted ${texts.length} lines.</b><br>
-    <h4>OCR Lines</h4>
-    ${textList}
-    ${normalizedBlock}
-    ${structuredBlock}
-    <details>
-      <summary>Legacy sample output</summary>
-      <pre>${legacySample.join('\n')}</pre>
-    </details>
+    <b>Extracted ${data.ocr_lines.length} lines.</b><br>
+    Sample:<pre>${(data.sample||[]).join('\n')}</pre>
   `;
 };
 
