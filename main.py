@@ -1,18 +1,34 @@
 """FastAPI application entrypoint."""
 
-# Reminder: create a backup before modifying this file:
-# cp main.py main_backup_stage1_$(date +%Y%m%d_%H%M).py
-
+import io
 import os
-import boto3, io
-from botocore.config import Config as BotoConfig
+import re
+import uuid
+from datetime import datetime
+from typing import Any, Dict, Optional
 
-B2_BUCKET   = os.getenv("B2_BUCKET")
+import boto3
+import pytesseract
+from botocore.config import Config as BotoConfig
+from fastapi import File, Form, Query, UploadFile
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from PIL import Image
+from pydantic import BaseModel
+
+from llm_validator import validate_invoice_text
+from vl_ocr import run_vl_ocr
+
+B2_BUCKET = os.getenv("B2_BUCKET")
 B2_ENDPOINT = os.getenv("B2_ENDPOINT")
-B2_KEY_ID   = os.getenv("B2_KEY_ID")
-B2_APP_KEY  = os.getenv("B2_APP_KEY")
+B2_KEY_ID = os.getenv("B2_KEY_ID")
+B2_APP_KEY = os.getenv("B2_APP_KEY")
+
 
 _S3 = None
+
+
 def get_s3():
     global _S3
     if _S3 is None and all([B2_BUCKET, B2_ENDPOINT, B2_KEY_ID, B2_APP_KEY]):
@@ -25,14 +41,20 @@ def get_s3():
         )
     return _S3
 
-def upload_image_to_b2(image_pil, label: str, filename: str) -> str:
-    """
-    Uploads PIL image to B2 at key: raw/<label>/<filename>
-    Returns the key (path in bucket).
-    """
+
+def clean_label(text: str) -> str:
+    text = text.lower()
+    text = re.sub(r"[^a-z0-9]+", "_", text)
+    return text.strip("_") or "unknown"
+
+
+def upload_image_to_b2(image_pil: Image.Image, label: str, filename: str) -> str:
+    """Uploads PIL image to B2 at key: raw/<label>/<filename>."""
+
     s3 = get_s3()
     if not s3:
         return ""  # cloud not configured
+
     key = f"raw/{clean_label(label)}/{filename}"
     buf = io.BytesIO()
     image_pil.convert("RGB").save(buf, format="JPEG", quality=92)
@@ -40,20 +62,6 @@ def upload_image_to_b2(image_pil, label: str, filename: str) -> str:
     s3.upload_fileobj(buf, B2_BUCKET, key, ExtraArgs={"ContentType": "image/jpeg"})
     return key
 
-
-from fastapi import FastAPI, File, UploadFile, Form
-from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi import Query
-from pydantic import BaseModel
-from typing import Any, Dict, List, Optional
-import pytesseract
-from PIL import Image
-import io, os, re, uuid
-from datetime import datetime
-
-from ocr_utils import normalize_ocr_text, run_paddle_ocr
-from llm_validator import validate_invoice_text
 
 app = FastAPI()
 
@@ -63,10 +71,6 @@ app.mount("/static", StaticFiles(directory="static", html=True), name="static")
 DATASET_ROOT = os.path.join("dataset", "raw")
 os.makedirs(DATASET_ROOT, exist_ok=True)
 
-def clean_label(text: str) -> str:
-    text = text.lower()
-    text = re.sub(r"[^a-z0-9]+", "_", text)
-    return text.strip("_") or "unknown"
 
 def save_image_to_class(img: Image.Image, label: str) -> str:
     cls = clean_label(label)
@@ -76,6 +80,7 @@ def save_image_to_class(img: Image.Image, label: str) -> str:
     path = os.path.join(class_dir, fname)
     img.convert("RGB").save(path, quality=92)
     return f"{cls}/{fname}"  # relative path for frontend
+
 
 @app.get("/preview_url")
 def preview_url(key: str = Query(...), expires: int = 3600):
@@ -89,79 +94,66 @@ def preview_url(key: str = Query(...), expires: int = 3600):
     )
     return {"url": url}
 
+
 @app.get("/ping")
 def ping():
     return {"message": "pong"}
-
-class OCRLine(BaseModel):
-    """A single OCR text line with associated confidence."""
-
-    text: str
-    confidence: float
 
 
 class InvoiceResult(BaseModel):
     """Response payload for the invoice OCR endpoint."""
 
-    ocr_lines: List[OCRLine]
-    normalized: str
+    ocr_raw: Dict[str, Any]
     structured: Dict[str, Any]
 
 
 @app.post("/invoice", response_model=InvoiceResult)
 async def invoice(file: UploadFile = File(...)):
-    """Run PaddleOCR on the provided invoice image."""
+    """Run PaddleOCR-VL on the provided invoice image and validate with GPT."""
 
     try:
         contents = await file.read()
-        ocr_pairs = run_paddle_ocr(contents)
-        ocr_lines = [
-            {"text": text, "confidence": confidence}
-            for text, confidence in ocr_pairs
-        ]
-        normalized_text = normalize_ocr_text(ocr_lines)
-        structured = validate_invoice_text(normalized_text)
+        vl_json = run_vl_ocr(contents)
+        structured = validate_invoice_text(vl_json)
         return {
-            "ocr_lines": ocr_lines,
-            "normalized": normalized_text,
+            "ocr_raw": vl_json,
             "structured": structured,
         }
     except Exception as exc:  # pragma: no cover - defensive logging for runtime issues
         return JSONResponse(
-            content={"error": f"OCR processing failed: {exc}"},
+            content={"error": f"OCR or GPT processing failed: {exc}"},
             status_code=500,
         )
+
 
 class ScanResponse(BaseModel):
     ocr_label: str
     saved_relpath: str
     note: str
 
+
 @app.post("/scan", response_model=ScanResponse)
 async def scan(file: UploadFile = File(...), fallback_label: Optional[str] = Form(None)):
-    """
-    Upload a product snapshot (from camera/file). OCR tries to read a label.
-    We save the image under dataset/raw/<label>/filename.jpg
-    """
+    """Upload a product snapshot and group it into the dataset folder."""
+
     try:
         contents = await file.read()
         image = Image.open(io.BytesIO(contents))
         text = pytesseract.image_to_string(image)
         lines = [l.strip() for l in text.splitlines() if l.strip()]
-        # Heuristic pick: first non-empty line; else fallback from UI; else "unknown"
         guessed = lines[0] if lines else (fallback_label or "unknown")
         relpath = save_image_to_class(image, guessed)
 
-        # Upload to B2 (if configured)
-        cloud_key = upload_image_to_b2(image, guessed, os.path.basename(relpath))  # returns key or ""
+        cloud_key = upload_image_to_b2(image, guessed, os.path.basename(relpath))
+        note = f"Uploaded to B2 at {cloud_key}" if cloud_key else "Stored locally only"
 
         return {
-            "ocr_lines": ocr_lines,
-            "normalized": normalized_text,
-            "structured": structured,
+            "ocr_label": guessed,
+            "saved_relpath": relpath,
+            "note": note,
         }
     except Exception as exc:  # pragma: no cover - defensive logging for runtime issues
-      return JSONResponse(
-        content={"error": f"OCR or GPT processing failed: {exc}"},
-        status_code=500,
-      )
+        return JSONResponse(
+            content={"error": f"Scan processing failed: {exc}"},
+            status_code=500,
+        )

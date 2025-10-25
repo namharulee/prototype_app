@@ -1,5 +1,5 @@
 annotated-types==0.7.0
-anyio==3.7.1
+anyio<4
 astor==0.8.1
 attrdict==2.0.1
 babel==2.17.0
@@ -29,7 +29,7 @@ fonttools==4.60.1
 future==1.0.0
 h11==0.14.0
 httpcore==0.17.3
-httpx==0.24.1
+httpx<0.25
 idna==3.11
 imageio==2.37.0
 imgaug==0.4.0
@@ -52,6 +52,9 @@ openpyxl==3.1.5
 opt-einsum==3.3.0
 packaging==25.0
 paddleocr==2.7.3
+paddleocr-vl
+paddlenlp
+paddleseg
 paddlepaddle==2.6.1
 pandas==2.3.3
 pillow==10.3.0

@@ -34,46 +34,48 @@ el('uploadInvoice').onclick = async () => {
   const r = await fetch(`${API_BASE}/invoice`, { method:'POST', body: fd });
   if (!r.ok) { alert('Invoice OCR failed'); return; }
   const data = await r.json();
-  const texts = data.ocr_lines?.map(x => x.text) || data.lines || [];
 
-  invoiceItems = data.items_for_dropdown || texts;
-  // fill dropdown for the scan step
-  fillDropdown(invoiceItems);
-
-  const textList = texts.length
-    ? `<ul>${texts.map(t => `<li>${t}</li>`).join('')}</ul>`
-    : '<i>No text lines detected.</i>';
-
-  const normalizedBlock = data.normalized
-    ? `<h4>Normalized Text</h4><pre>${data.normalized}</pre>`
-    : '';
-
+  let structuredObj = null;
   let structuredBlock = '';
   if (data.structured) {
     try {
-      const structuredObj = typeof data.structured === 'string'
+      structuredObj = typeof data.structured === 'string'
         ? JSON.parse(data.structured)
         : data.structured;
-      structuredBlock = `<h4>Structured Data</h4><pre>${JSON.stringify(structuredObj, null, 2)}</pre>`;
+      structuredBlock = `<h4>GPT Normalised</h4><pre>${escapeHtml(JSON.stringify(structuredObj, null, 2))}</pre>`;
     } catch (err) {
-      structuredBlock = `<h4>Structured Data</h4><div class="error-message" style="color:#ff6b6b;">Failed to parse structured data: ${err.message}</div><pre>${typeof data.structured === 'string' ? data.structured : JSON.stringify(data.structured)}</pre>`;
+      structuredBlock = `<h4>GPT Normalised</h4><div class="error-message" style="color:#ff6b6b;">Failed to parse structured data: ${escapeHtml(err.message)}</div><pre>${escapeHtml(typeof data.structured === 'string' ? data.structured : JSON.stringify(data.structured))}</pre>`;
     }
   }
 
-  const legacySample = data.sample || texts.slice(0, 5);
+  const rawBlock = data.ocr_raw
+    ? `<h4>Raw OCR (PaddleOCR-VL)</h4><pre>${escapeHtml(JSON.stringify(data.ocr_raw, null, 2))}</pre>`
+    : '<i>No OCR response returned.</i>';
+
+  const itemNames = new Set();
+  if (structuredObj?.items) {
+    structuredObj.items.forEach((item) => {
+      if (item && typeof item.name === 'string' && item.name.trim()) {
+        itemNames.add(item.name.trim());
+      }
+    });
+  }
+  if (Array.isArray(data.ocr_raw?.table)) {
+    data.ocr_raw.table.forEach((row) => {
+      if (row && typeof row.description === 'string' && row.description.trim()) {
+        itemNames.add(row.description.trim());
+      }
+    });
+  }
+
+  invoiceItems = Array.from(itemNames);
+  fillDropdown(invoiceItems);
 
   el('invoiceResult').innerHTML = `
-    <b>Extracted ${texts.length} lines.</b><br>
-    <h4>OCR Lines</h4>
-    ${textList}
-    ${normalizedBlock}
+    ${rawBlock}
     ${structuredBlock}
-    <details>
-      <summary>Legacy sample output</summary>
-      <pre>${legacySample.join('\n')}</pre>
-    </details>
   `;
-}
+};
 
 function buildOcrList(ocrLines, fallbackTexts) {
   if (ocrLines.length) {
