@@ -1,6 +1,7 @@
 """FastAPI application entrypoint."""
 
 import io
+import json
 import os
 import re
 import uuid
@@ -114,7 +115,7 @@ async def invoice(file: UploadFile = File(...)):
     try:
         contents = await file.read()
         vl_json = run_vl_ocr(contents)
-        structured = validate_invoice_text(vl_json)
+        structured = validate_invoice_text(json.dumps(vl_json))
         return {
             "ocr_raw": vl_json,
             "structured": structured,
