@@ -41,34 +41,57 @@ def validate_invoice_text(raw_data: Any) -> Dict[str, Any]:
     raw_text = _serialise_input(raw_data)
 
     prompt = f"""
-You are an invoice validator.
+You are an invoice parser and validator.
 
-Below is structured OCR data extracted from a supplier's invoice.
-Your goal is to verify and normalize it, returning strictly valid JSON.
+Your task is to interpret OCR text extracted from supplier invoices and normalize it into a consistent JSON structure. 
+The output will be used for automated item matching with live camera scanning data, not just for human reading.
 
-Rules:
-1. Distinguish between the supplier (seller) and the recipient (buyer).
-   - The supplier is the company issuing the invoice.
-   - The recipient is the business or restaurant marked as “Delivered To”, “Ship To”, “Customer”, or similar.
-   - If both are present, ALWAYS use the recipient as the value of "recipient".
-2. Normalize key fields:
-   - "date" → standardized format (e.g., 2024-06-14)
-   - "total" → numeric (float)
-   - "items" → each has {"name", "quantity", "price"}
-3. Return only this JSON structure:
+Follow these strict rules:
+
+1. Identify the supplier (the company issuing the invoice) and the recipient (the customer or restaurant being billed or delivered to).
+   - Supplier is usually found near "Invoice From", "Tax Invoice", "ABN", or a company header.
+   - Recipient is found under "Deliver To", "Ship To", or "Invoice To".
+
+2. Standardize all fields into this JSON schema:
 {{
-  "supplier": "<supplier company name>",
-  "recipient": "<customer or delivery destination>",
+  "supplier": "<supplier name>",
+  "recipient": "<recipient name>",
+  "date": "<YYYY-MM-DD>",
   "items": [
-    {{"name": "...", "quantity": 0, "price": 0.0}}
+    {{
+      "name": "<product or item name>",
+      "quantity": {{
+        "value": <numeric quantity>,
+        "unit": "<unit if available, e.g. kg, ctn, pack, pc, each, box>"
+      }},
+      "unit_price": <numeric unit price if available>,
+      "amount": <numeric line total if available>
+    }}
   ],
-  "total": 0.0,
-  "date": "YYYY-MM-DD"
+  "total": <numeric total amount>
 }}
-4. If the invoice text does not clearly identify the recipient, leave the field as null.
-5. Do NOT guess missing data, and output ONLY valid JSON with no explanations.
 
-Structured OCR input:
+3. Invoices may use different column names such as:
+   - “Product Description”, “Description”, “Item”, “Goods” → map to "name".
+   - “Qty”, “Quantity”, “QTY/UNIT”, “Pack Size” → map to "quantity".
+   - “List Price”, “Unit Price”, “Price (ex GST)”, “Unit Cost” → map to "unit_price".
+   - “Amount”, “Subtotal”, “Excl GST”, “Incl GST” → map to "amount".
+   Always extract by meaning, not by column title.
+
+4. Units are optional:
+   - If OCR text includes something like “3kg”, “2 ctn”, “5 pack”, “10pc”, split value and unit.
+   - If no unit is clear, set "unit" = null.
+   - Preserve numeric value precision.
+
+5. Normalize numbers:
+   - Strip commas, currency symbols, and spaces.
+   - Convert to floats (e.g. "2,145.50" → 2145.5).
+
+6. Normalize date to "YYYY-MM-DD". Infer missing year if necessary (e.g. invoice from “11-Sep-25” → “2025-09-11”).
+
+7. Return strictly valid JSON — no markdown, comments, or explanations.
+
+OCR extracted text:
 {raw_text}
 """
 
