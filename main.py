@@ -120,9 +120,13 @@ async def invoice(file: UploadFile = File(...)):
             "ocr_raw": vl_json,
             "structured": structured,
         }
-    except Exception as exc:  # pragma: no cover - defensive logging for runtime issues
+    except Exception as exc:
+        import traceback
+        print("=== OCR ERROR TRACEBACK ===")
+        traceback.print_exc()
+        print("============================")
         return JSONResponse(
-            content={"error": f"OCR or GPT processing failed: {exc}"},
+            content={"error": f"OCR processing failed: {exc}"},
             status_code=500,
         )
 
